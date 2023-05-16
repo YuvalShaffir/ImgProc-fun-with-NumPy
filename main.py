@@ -21,13 +21,14 @@ def read_image(filename, representation):
     :param representation: 1 for greyscale and 2 for RGB
     :return: Returns the image as an np.float64 matrix normalized to [0,1]
     """
-    # read the image - check if it is greyscale image:
+    # read the image - check if it is greyscale or RGB image:
     img = imageio.imread(filename)
 
     # greyscale representation
     if representation == GRAYSCALE:
-        img_g = rgb2gray(img)
+        img_g = rgb2gray(img) # incase it is an RGB image, turn it into grayscale
         img_g = img_g.astype('float64')
+        img_g_norm = img_g / 255 
         return img_g
 
     # RGB representation
@@ -58,6 +59,7 @@ def rgb2yiq(imRGB):
     :param imRGB: height X width X 3 np.float64 matrix in the [0,1] range
     :return: the image in the YIQ space
     """
+    # We use the dot product to multipley the R,G,B channels with the R,G,B channels of the YIQ matrix.
     return np.dot(imRGB, RGB_YIQ_TRANSFORMATION_MATRIX.T)
 
 
@@ -68,7 +70,7 @@ def yiq2rgb(imYIQ):
         the Y channel and in the range of [-1,1] for the I,Q channels
     :return: the image in the RGB space
     """
-    # create inverse transformation matrix
+    # create inverse transformation matrix of the YIQ matrix
     yiq_to_rgb_matrix = np.linalg.inv(RGB_YIQ_TRANSFORMATION_MATRIX)
     return np.dot(imYIQ, yiq_to_rgb_matrix.T)
 
@@ -81,7 +83,7 @@ def check_if_rgb(img):
     """
     if len(img.shape) < 3:
         return False
-    elif len(img.shape) == 3:
+    elif len(img.shape) == 3: # has 3 channels: RGB
         return True
 
 
@@ -91,14 +93,19 @@ def histogram_equalize(im_orig):
     :param im_orig: Input float64 [0,1] image
     :return: [im_eq, hist_orig, hist_eq]
     """
+    # get histogram and cumsum
     intensity_mat, is_rgb = get_intensity_arr(im_orig)
     hist_c, hist_orig, bin_edges = create_histograms(intensity_mat)
     min_level = np.min(hist_c[np.nonzero(hist_c)])
     hist_num_of_indxs = (len(hist_c)-1)
+    
+    # create the lookup table by multiplying: (max index) x (probabilty to get each index), then round it and make it an integer.
     look_up_tble = np.round_(hist_num_of_indxs * np.subtract(hist_c, min_level)/(hist_c[-1] - min_level)).astype(int)
+    
+    # generate new image from the lookup table
     hist_eq = get_hist_eq(hist_num_of_indxs, hist_orig, look_up_tble)
-    # print_hist(hist_c, hist_eq, hist_orig, look_up_tble)
     img_eq = show_img(im_orig, intensity_mat, is_rgb, look_up_tble)
+    
     return [img_eq, hist_orig, hist_eq]
 
 
@@ -132,6 +139,7 @@ def get_intensity_arr(im_orig):
     :return: intensity matrix
             , is_rgb: True - RGB/ False - grayscale
     """
+    # returns only the intencity channel of YIQ
     is_rgb = check_if_rgb(im_orig)
     if is_rgb:
         yiq_img = rgb2yiq(im_orig)
@@ -176,10 +184,6 @@ def print_hist(hist_c, hist_eq, hist_orig, look_up_tble, plot=False):
     if plot:
         plt.plot(hist_eq)
         plt.show()
-
-
-# histogram_equalize(read_image("tank.jpg",2))
-# histogram_equalize(grad)
 
 
 def quantize_hist(hist_orig, n_quant, q_arr, z_arr):
